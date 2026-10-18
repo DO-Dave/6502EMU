@@ -8,8 +8,12 @@ int main()
   CPU *cpu = &c;
   MEM *mem = &m;
   reset_cpu(cpu, mem);
-  // for (u8 expec = 0; expec < 255; expec++)
-  //   test_lda_im(cpu, mem, expec);
+  for (u8 expec = 0; expec < 255; expec++)
+  {
+    test_lda_im(cpu, mem, expec);
+    test_ldx_im(cpu, mem, expec);
+    test_ldy_im(cpu, mem, expec);
+  }
 
   test_do_nothing(cpu, mem);
   test_garbage_inst(cpu, mem);

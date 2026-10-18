@@ -1,5 +1,6 @@
 #ifndef CPU_H
 #define CPU_H
+#include "inst.h"
 #include "mem.h"
 
 #define COLOR_RESET "\x1b[0m"
@@ -9,61 +10,11 @@
 #define COLOR_GREEN "\x1b[32m"
 #define COLOR_MAGENTA "\x1b[35m"
 #define COLOR_BLUE "\x1b[34m"
-
-#define NULL_INS 0x00
-// LDA
-#define INS_LDA_IM 0xA9
-#define INS_LDA_ZP 0xA5
-#define INS_LDA_ZP_X 0xB5
-#define INS_LDA_ABS 0xAD
-#define INS_LDA_ABS_X 0xBD
-#define INS_LDA_ABS_Y 0xB9
-#define INS_LDA_IND_X 0xA1
-#define INS_LDA_IND_Y 0xB1
-// LDX
-#define INS_LDX_IM 0xA2
-#define INS_LDX_ZP 0xA6
-#define INS_LDX_ZP_Y 0xB6
-#define INS_LDX_ABS 0xAE
-#define INS_LDX_ABS_Y 0xBE
-// LDY
-#define INS_LDY_IM 0xA0
-#define INS_LDY_ZP 0xA4
-#define INS_LDY_ZP_X 0xB4
-#define INS_LDY_ABS 0xAC
-#define INS_LDY_ABS_X 0xBC
-// JSR
-#define INS_JSR_A 0x20
-// cycle count
-// LDA
-#define INS_LDA_IM_CYC 2
-#define INS_LDA_ZP_CYC 3
-#define INS_LDA_ZP_X_CYC 4
-#define INS_LDA_ABS_CYC 4
-#define INS_LDA_ABS_X_CYC 4 // or 4+1 if page bound cross
-#define INS_LDA_ABS_Y_CYC 4 // or 4+1 if page bound cross
-#define INS_LDA_IND_X_CYC 6
-#define INS_LDA_IND_Y_CYC 5 // or 5+1 if page bound cross
-// LDX
-#define INS_LDX_IM_CYC 2
-#define INS_LDX_ZP_CYC 3
-#define INS_LDX_ZP_Y_CYC 4
-#define INS_LDX_ABS_CYC 4
-#define INS_LDX_ABS_Y_CYC 4 // +1 if boundary cross
-// LDY
-#define INS_LDY_IM_CYC 2
-#define INS_LDY_ZP_CYC 3
-#define INS_LDY_ZP_X_CYC 4
-#define INS_LDY_ABS_CYC 4
-#define INS_LDY_ABS_X_CYC 4 // +1 if boundary cross
-// JSR
-#define INS_JSR_A_CYC 6
-
 typedef struct
 {
 
-  Word PC; // program counter
-  Word SP; // stack pointer
+  Word PC;
+  Word SP;
 
   Byte A, X, Y; // registers: accumulator, index X, index Y
   // Status flags
@@ -81,7 +32,7 @@ typedef struct
 s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles);
 Byte fetch_byte(CPU *cpu, MEM *mem, s32 *cycles);
 Word fetch_word(CPU *cpu, MEM *mem, s32 *cycles);
-// simply reads a byte at a given address but does not increment the PC
+
 Byte read_byte(MEM *mem, const u16 addr, s32 *cycles);
 void reset_cpu(CPU *cpu, MEM *mem);
 void print_cpu(const CPU *cpu);
