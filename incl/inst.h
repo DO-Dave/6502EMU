@@ -1,5 +1,6 @@
 #ifndef INST_H
 #define INST_H
+#include "mem.h"
 #define NULL_INS 0x00
 // LDA
 #define INS_LDA_IM 0xA9
@@ -48,4 +49,6 @@
 #define INS_LDY_ABS_X_CYC 4 // +1 if boundary cross
 // JSR
 #define INS_JSR_A_CYC 6
-#endif //INST_H
+
+u8 cyc_from_opcode(Byte opcode);
+#endif // INST_H

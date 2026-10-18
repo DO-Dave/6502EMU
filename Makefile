@@ -8,7 +8,7 @@ $(BUILD_DIR):
 
 $(BUILD_DIR)/%.o: src/%.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
-SRCS = src/main.c src/cpu.c src/mem.c src/test.c
+SRCS = src/main.c src/cpu.c src/mem.c src/test.c src/inst.c
 OBJS = $(SRCS:src/%.c=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean run

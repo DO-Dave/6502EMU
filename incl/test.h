@@ -1,6 +1,7 @@
 #ifndef TEST_H
 #define TEST_H
 #include "cpu.h"
+#include "inst.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -10,34 +11,12 @@ void test_do_nothing(CPU *cpu, MEM *mem);
 void test_garbage_inst(CPU *cpu, MEM *mem);
 
 /* LDA Instruction */
-void test_lda_im(CPU *cpu, MEM *mem, u8 expected);
-void test_lda_zp(CPU *cpu, MEM *mem);
-void test_lda_zpx(CPU *cpu, MEM *mem);
-void test_lda_zpx_wraping(CPU *cpu, MEM *mem);
-void test_lda_abs(CPU *cpu, MEM *mem);
-void test_lda_abs_x(CPU *cpu, MEM *mem);
-void test_lda_abs_x_5_cyc(CPU *cpu, MEM *mem);
-void test_lda_abs_y(CPU *cpu, MEM *mem);
-void test_lda_abs_y_5_cyc(CPU *cpu, MEM *mem);
+
 void test_lda_ind_x(CPU *cpu, MEM *mem);
 void test_lda_ind_y(CPU *cpu, MEM *mem);
 void test_lda_ind_y_6_cyc(CPU *cpu, MEM *mem);
 /* LDX Instruction */
-void test_ldx_im(CPU *cpu, MEM *mem, u8 expected);
-void test_ldx_zp(CPU *cpu, MEM *mem);
-void test_ldx_zp_y(CPU *cpu, MEM *mem);
-void test_ldx_zp_y_wrapping(CPU *cpu, MEM *mem);
-void test_ldx_abs(CPU *cpu, MEM *mem);
-void test_ldx_abs_y(CPU *cpu, MEM *mem);
-void test_ldx_abs_y_5_cyc(CPU *cpu, MEM *mem);
 /* LDY Instruction*/
-void test_ldy_im(CPU *cpu, MEM *mem, u8 expected);
-void test_ldy_zp(CPU *cpu, MEM *mem);
-void test_ldy_zp_x(CPU *cpu, MEM *mem);
-void test_ldy_zp_x_wrapping(CPU *cpu, MEM *mem);
-void test_ldy_abs(CPU *cpu, MEM *mem);
-void test_ldy_abs_x(CPU *cpu, MEM *mem);
-void test_ldy_abs_x_5_cyc(CPU *cpu, MEM *mem);
 
 /* JSR Instruction */
 void test_jsr_a(CPU *cpu, MEM *mem);
@@ -54,5 +33,19 @@ bool check_all_flags_same(const CPU *cpu, const CPU *cpu_copy);
 
 /* Test Utilities */
 void print_test_pass(const char *name, s32 used_cycles);
+
+void test_load_imm(const Byte expec_out, Byte *out_reg, const u8 opcode, CPU *cpu, MEM *mem);
+
+void test_load_zp(const Byte expec_out, Byte *out_reg, const u8 opcode, CPU *cpu, MEM *mem);
+
+void test_load_zp_x(const Byte expec_out, Byte *out_reg, Byte *x_reg, const u8 opcode, CPU *cpu, MEM *mem);
+
+void test_load_zp_y(const Byte expec_out, Byte *out_reg, Byte *y_reg, const u8 opcode, CPU *cpu, MEM *mem);
+
+void test_load_abs(const Byte expec_out, Byte *out_reg, const u8 opcode, CPU *cpu, MEM *mem);
+
+void test_load_abs_x(const Byte expec_out, Byte *out_reg, Byte *x_reg, const u8 opcode, CPU *cpu, MEM *mem);
+
+void test_load_abs_y(const Byte expec_out, Byte *out_reg, Byte *y_reg, const u8 opcode, CPU *cpu, MEM *mem);
 
 #endif /* TEST_H */
