@@ -1,4 +1,5 @@
 #include "../incl/test.h"
+
 bool check_lda_flags(const CPU *cpu, const CPU *cpu_copy)
 {
   // Flags that can change
@@ -9,7 +10,24 @@ bool check_lda_flags(const CPU *cpu, const CPU *cpu_copy)
 
   return flags_set && flags_unchanged;
 }
+bool check_ldx_flags(const CPU *cpu, const CPU *cpu_copy)
+{
+  const bool flags_set = (cpu->Z == (!cpu->X)) && (cpu->N == ((cpu->X & 0x80) != 0));
 
+  const bool flags_unchanged =
+      cpu->C == cpu_copy->C && cpu->I == cpu_copy->I && cpu->D == cpu_copy->D && cpu->B == cpu_copy->B && cpu->V == cpu_copy->V;
+
+  return flags_set && flags_unchanged;
+}
+bool check_ldy_flags(const CPU *cpu, const CPU *cpu_copy)
+{
+  const bool flags_set = (cpu->Z == (!cpu->Y)) && (cpu->N == ((cpu->Y & 0x80) != 0));
+
+  const bool flags_unchanged =
+      cpu->C == cpu_copy->C && cpu->I == cpu_copy->I && cpu->D == cpu_copy->D && cpu->B == cpu_copy->B && cpu->V == cpu_copy->V;
+
+  return flags_set && flags_unchanged;
+}
 bool check_all_flags_same(const CPU *cpu, const CPU *cpu_copy)
 {
   return (cpu->C == cpu_copy->C) && (cpu->Z == cpu_copy->Z) && (cpu->I == cpu_copy->I) && (cpu->D == cpu_copy->D) &&
@@ -90,15 +108,15 @@ void test_exe_full_inst_always_lda_zpx(CPU *cpu, MEM *mem)
   cpu->PC = pc_start;
 
   // SetUp
-  mem->Data[pc_start] = INS_LDA_ZPX;
+  mem->Data[pc_start] = INS_LDA_ZP_X;
   mem->Data[0xFFFD] = zp_offset;
   mem->Data[zp_offset + x_reg_value] = expected;
 
   // Run
-  s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_ZPX_CYC - 3);
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_ZP_X_CYC - 3);
 
   // Check
-  assert(used_cycles == INS_LDA_ZPX_CYC);
+  assert(used_cycles == INS_LDA_ZP_X_CYC);
   assert(cpu->A == expected);
   assert(check_lda_flags(cpu, &cpu_copy));
 
@@ -213,15 +231,15 @@ void test_lda_zpx(CPU *cpu, MEM *mem)
   cpu->PC = pc_start;
 
   // SetUp
-  mem->Data[pc_start] = INS_LDA_ZPX;
+  mem->Data[pc_start] = INS_LDA_ZP_X;
   mem->Data[0xFFFD] = zp_offset;
   mem->Data[zp_offset + x_reg_value] = expected;
 
   // Run
-  s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_ZPX_CYC);
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_ZP_X_CYC);
 
   // Check
-  assert(used_cycles == INS_LDA_ZPX_CYC);
+  assert(used_cycles == INS_LDA_ZP_X_CYC);
   assert(cpu->A == expected);
   assert(check_lda_flags(cpu, &cpu_copy));
 
@@ -244,15 +262,15 @@ void test_lda_zpx_wraping(CPU *cpu, MEM *mem)
   cpu->PC = pc_start;
 
   // SetUp
-  mem->Data[pc_start] = INS_LDA_ZPX;
+  mem->Data[pc_start] = INS_LDA_ZP_X;
   mem->Data[0xFFFD] = zp_offset;
   mem->Data[effective_addr] = expected;
 
   // Run
-  s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_ZPX_CYC);
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_ZP_X_CYC);
 
   // Check
-  assert(used_cycles == INS_LDA_ZPX_CYC);
+  assert(used_cycles == INS_LDA_ZP_X_CYC);
   assert(cpu->A == expected);
   assert(check_lda_flags(cpu, &cpu_copy));
 
@@ -367,7 +385,7 @@ void test_lda_abs_y(CPU *cpu, MEM *mem)
   assert(used_cycles == INS_LDA_ABS_Y_CYC + add_cycle);
   assert(cpu->A == expected);
   assert(check_lda_flags(cpu, &cpu_copy));
-  print_test_pass("LDA_ABS_X:", used_cycles);
+  print_test_pass("LDA_ABS_Y:", used_cycles);
 }
 
 void test_lda_abs_y_5_cyc(CPU *cpu, MEM *mem)
@@ -396,7 +414,7 @@ void test_lda_abs_y_5_cyc(CPU *cpu, MEM *mem)
   assert(used_cycles == INS_LDA_ABS_Y_CYC + add_cycle);
   assert(cpu->A == expected);
   assert(check_lda_flags(cpu, &cpu_copy));
-  print_test_pass("LDA_ABS_X_5_CYC:", used_cycles);
+  print_test_pass("LDA_ABS_Y_5_CYC:", used_cycles);
 }
 
 void test_jsr_a(CPU *cpu, MEM *mem)
@@ -453,27 +471,42 @@ void test_lda_ind_x(CPU *cpu, MEM *mem)
   assert(check_lda_flags(cpu, &cpu_copy));
   print_test_pass("LDA_IND_X:", used_cycles);
 }
-write tests for ind x and ind y
+
 void test_lda_ind_y(CPU *cpu, MEM *mem)
 {
   /*
-   * The 16 bits + Y register after the instruction are the next address; The go to that address and look at the 8 bits after it
-   * that is the value we want in A Again only care for this case page boundary cross
+   * LDA ($nn),Y:
+   * Read a 16-bit address from zero page, add Y,
+   * then load A from the resulting address.
+   * Do not cross a page boundary.
    */
   reset_cpu(cpu, mem);
+
   u8 add_cycle = 0;
   CPU cpu_copy = *cpu;
+
   cpu->Y = 0x04;
-  u16 zp_addr = 0x0002;
-  u16 addr_result = cpu->Y + zp_addr;
-  if ((zp_addr >> 8) != (addr_result >> 8)) add_cycle++;
-  u16 pc_start = 0XFFFC;
+
+  u8 zp_addr = 0x02;
+  u16 base_addr = 0x8002;
+  u16 addr_result = base_addr + cpu->Y;
+
+  if ((base_addr >> 8) != (addr_result >> 8)) add_cycle++;
+
+  u16 pc_start = 0xFFFC;
   u8 expected = 0x67;
+
+  // Instruction and operand
   mem->Data[pc_start] = INS_LDA_IND_Y;
   mem->Data[0xFFFD] = zp_addr;
-  mem->Data[addr_result] = 0x00;
-  mem->Data[0x0007] = 0x80;
-  mem->Data[0x8000] = expected;
+
+  // Zero-page pointer contains 0x8002 (little-endian)
+  mem->Data[0x0002] = 0x02;
+  mem->Data[0x0003] = 0x80;
+
+  // Effective address: 0x8002 + 0x04 = 0x8006
+  mem->Data[addr_result] = expected;
+
   // Run
   s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_IND_Y_CYC);
 
@@ -481,13 +514,440 @@ void test_lda_ind_y(CPU *cpu, MEM *mem)
   assert(used_cycles == INS_LDA_IND_Y_CYC + add_cycle);
   assert(cpu->A == expected);
   assert(check_lda_flags(cpu, &cpu_copy));
-  print_test_pass("LDA_IND_X:", used_cycles);
+
+  print_test_pass("LDA_IND_Y:", used_cycles);
 }
+
 void test_lda_ind_y_6_cyc(CPU *cpu, MEM *mem)
 {
-  return;
+  /*
+   * LDA ($nn),Y:
+   * Test page-boundary crossing.
+   * Base address:      0x80FE
+   * Y register:        0x04
+   * Effective address: 0x8102
+   * Expected cycles:   6
+   */
+  reset_cpu(cpu, mem);
+
+  CPU cpu_copy = *cpu;
+
+  cpu->Y = 0x04;
+
+  u8 zp_addr = 0x02;
+  u16 base_addr = 0x80FE;
+  u16 addr_result = base_addr + cpu->Y;
+
+  u16 pc_start = 0xFFFC;
+  u8 expected = 0x67;
+
+  // Instruction and operand
+  mem->Data[pc_start] = INS_LDA_IND_Y;
+  mem->Data[0xFFFD] = zp_addr;
+
+  // Zero-page pointer contains 0x80FE (little-endian)
+  mem->Data[0x0002] = 0xFE;
+  mem->Data[0x0003] = 0x80;
+
+  // Effective address: 0x80FE + 0x04 = 0x8102
+  mem->Data[addr_result] = expected;
+
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_IND_Y_CYC);
+
+  // Check
+  assert((base_addr >> 8) != (addr_result >> 8));
+  assert(used_cycles == INS_LDA_IND_Y_CYC + 1);
+  assert(cpu->A == expected);
+  assert(check_lda_flags(cpu, &cpu_copy));
+
+  print_test_pass("LDA_IND_Y_6_CYC:", used_cycles);
 }
+
+void test_ldx_im(CPU *cpu, MEM *mem, u8 expected)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u16 pc_start = 0XFFFC;
+
+  // SetUp
+  cpu->PC = pc_start;
+  mem->Data[pc_start] = INS_LDX_IM;
+  mem->Data[0xFFFD] = expected;
+
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDX_IM_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDX_IM_CYC);
+  assert(cpu->X == expected);
+  assert(check_ldx_flags(cpu, &cpu_copy));
+
+  print_test_pass("LDX_IM:", used_cycles);
+}
+
+void test_ldx_zp(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u32 expected = 0x2;
+  u16 zp_offset = 0x0042;
+  u16 pc_start = 0xFFFC;
+
+  cpu->PC = pc_start;
+
+  // SetUp
+  mem->Data[pc_start] = INS_LDX_ZP;
+  mem->Data[zp_offset] = expected;
+  mem->Data[0xFFFD] = zp_offset;
+
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDX_ZP_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDX_ZP_CYC);
+  assert(cpu->X == expected);
+  assert(check_ldx_flags(cpu, &cpu_copy));
+
+  print_test_pass("LDX_ZP:", used_cycles);
+}
+
+void test_ldx_zp_y(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u32 expected = 0x3;
+  u16 zp_offset = 0x0042;
+  u16 y_reg_value = 0x5;
+
+  // Setting up the X register manually
+  cpu->Y = y_reg_value;
+
+  u16 pc_start = 0xFFFC;
+  cpu->PC = pc_start;
+
+  // SetUp
+  mem->Data[pc_start] = INS_LDX_ZP_Y;
+  mem->Data[0xFFFD] = zp_offset;
+  mem->Data[zp_offset + y_reg_value] = expected;
+
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDX_ZP_Y_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDX_ZP_Y_CYC);
+  assert(cpu->X == expected);
+  assert(check_ldx_flags(cpu, &cpu_copy));
+
+  print_test_pass("LDX_ZP_Y:", used_cycles);
+}
+
+void test_ldx_zp_y_wrapping(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+
+  u32 expected = 0x3;
+  u8 zp_offset = 0x80;
+  u8 y_reg_value = 0xFF;
+  u8 effective_addr = zp_offset + y_reg_value;
+  u16 pc_start = 0xFFFC;
+
+  // Setting up the X register manually
+  cpu->Y = y_reg_value;
+  cpu->PC = pc_start;
+
+  // SetUp
+  mem->Data[pc_start] = INS_LDX_ZP_Y;
+  mem->Data[0xFFFD] = zp_offset;
+  mem->Data[effective_addr] = expected;
+
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDX_ZP_Y_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDX_ZP_Y_CYC);
+  assert(cpu->X == expected);
+  assert(check_ldx_flags(cpu, &cpu_copy));
+
+  print_test_pass("LDX_ZP_Y_Overflow:", used_cycles);
+}
+
+void test_ldx_abs(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u8 expected = 0x67;
+  u16 pc_start = 0XFFFC;
+  u16 addr = 0x4480;
+  // SetUp
+  cpu->PC = pc_start;
+  mem->Data[pc_start] = INS_LDX_ABS;
+  // First low bits, then high bits
+  mem->Data[0xFFFD] = addr & 0xFF;
+  mem->Data[0xFFFE] = (addr >> 8) & 0xFF;
+  mem->Data[addr] = expected;
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDX_ABS_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDX_ABS_CYC);
+  assert(cpu->X == expected);
+  assert(check_ldx_flags(cpu, &cpu_copy));
+  print_test_pass("LDX_ABS:", used_cycles);
+}
+
+void test_ldx_abs_y(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u8 expected = 0x67;
+  u8 add_cycle = 0;
+  u16 pc_start = 0XFFFC;
+  u16 addr = 0x4480;
+  u8 y_reg_offset = 0x01;
+  u16 resulting_addr = addr + y_reg_offset;
+  if ((addr >> 8) != (resulting_addr >> 8)) add_cycle++;
+  // SetUp
+  cpu->PC = pc_start;
+  cpu->Y = y_reg_offset;
+  mem->Data[pc_start] = INS_LDX_ABS_Y;
+  // First low bits, then high bits
+  mem->Data[0xFFFD] = addr & 0xFF;
+  mem->Data[0xFFFE] = (addr >> 8) & 0xFF;
+  mem->Data[resulting_addr] = expected;
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDX_ABS_Y_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDX_ABS_Y_CYC + add_cycle);
+  assert(cpu->X == expected);
+  assert(check_ldx_flags(cpu, &cpu_copy));
+  print_test_pass("LDX_ABS_Y:", used_cycles);
+}
+
+void test_ldx_abs_y_5_cyc(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u8 expected = 0x69;
+  u8 add_cycle = 0;
+  u16 pc_start = 0XFFFC;
+  u16 addr = 0x4402;
+  u8 y_reg_offset = 0xFF; // for garantueeing the crossing the page
+  u16 resulting_addr = addr + y_reg_offset;
+  if ((addr >> 8) != (resulting_addr >> 8)) add_cycle++;
+  // SetUp
+  cpu->PC = pc_start;
+  cpu->Y = y_reg_offset;
+  mem->Data[pc_start] = INS_LDX_ABS_Y;
+  // First low bits, then high bits
+  mem->Data[0xFFFD] = addr & 0xFF;
+  mem->Data[0xFFFE] = (addr >> 8) & 0xFF;
+  mem->Data[resulting_addr] = expected;
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDX_ABS_Y_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDX_ABS_Y_CYC + add_cycle);
+  assert(cpu->X == expected);
+  assert(check_ldx_flags(cpu, &cpu_copy));
+  print_test_pass("LDX_ABS_Y_5_CYC:", used_cycles);
+}
+
+void test_ldy_im(CPU *cpu, MEM *mem, u8 expected)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u16 pc_start = 0XFFFC;
+
+  // SetUp
+  cpu->PC = pc_start;
+  mem->Data[pc_start] = INS_LDY_IM;
+  mem->Data[0xFFFD] = expected;
+
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDY_IM_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDY_IM_CYC);
+  assert(cpu->Y == expected);
+  assert(check_ldy_flags(cpu, &cpu_copy));
+
+  print_test_pass("LDY_IM:", used_cycles);
+}
+
+void test_ldy_zp(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u32 expected = 0x2;
+  u16 zp_offset = 0x0042;
+  u16 pc_start = 0xFFFC;
+
+  cpu->PC = pc_start;
+
+  // SetUp
+  mem->Data[pc_start] = INS_LDY_ZP;
+  mem->Data[zp_offset] = expected;
+  mem->Data[0xFFFD] = zp_offset;
+
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDY_ZP_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDY_ZP_CYC);
+  assert(cpu->Y == expected);
+  assert(check_ldy_flags(cpu, &cpu_copy));
+
+  print_test_pass("LDY_ZP:", used_cycles);
+}
+
+void test_ldy_zp_x(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u32 expected = 0x3;
+  u16 zp_offset = 0x0042;
+  u16 x_reg_value = 0x5;
+
+  // Setting up the X register manually
+  cpu->X = x_reg_value;
+
+  u16 pc_start = 0xFFFC;
+  cpu->PC = pc_start;
+
+  // SetUp
+  mem->Data[pc_start] = INS_LDY_ZP_X;
+  mem->Data[0xFFFD] = zp_offset;
+  mem->Data[zp_offset + x_reg_value] = expected;
+
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDY_ZP_X_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDX_ZP_Y_CYC);
+  assert(cpu->Y == expected);
+  assert(check_ldy_flags(cpu, &cpu_copy));
+
+  print_test_pass("LDY_ZP_X:", used_cycles);
+}
+
+void test_ldy_zp_x_wrapping(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+
+  u32 expected = 0x3;
+  u8 zp_offset = 0x80;
+  u8 x_reg_value = 0xFF;
+  u8 effective_addr = zp_offset + x_reg_value;
+  u16 pc_start = 0xFFFC;
+
+  // Setting up the X register manually
+  cpu->X = x_reg_value;
+  cpu->PC = pc_start;
+
+  // SetUp
+  mem->Data[pc_start] = INS_LDY_ZP_X;
+  mem->Data[0xFFFD] = zp_offset;
+  mem->Data[effective_addr] = expected;
+
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDY_ZP_X_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDY_ZP_X_CYC);
+  assert(cpu->Y == expected);
+  assert(check_ldy_flags(cpu, &cpu_copy));
+
+  print_test_pass("LDY_ZP_X_Overflow:", used_cycles);
+}
+
+void test_ldy_abs(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u8 expected = 0x67;
+  u16 pc_start = 0XFFFC;
+  u16 addr = 0x4480;
+  // SetUp
+  cpu->PC = pc_start;
+  mem->Data[pc_start] = INS_LDY_ABS;
+  // First low bits, then high bits
+  mem->Data[0xFFFD] = addr & 0xFF;
+  mem->Data[0xFFFE] = (addr >> 8) & 0xFF;
+  mem->Data[addr] = expected;
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDY_ABS_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDX_ABS_CYC);
+  assert(cpu->Y == expected);
+  assert(check_ldy_flags(cpu, &cpu_copy));
+  print_test_pass("LDY_ABS:", used_cycles);
+}
+
+void test_ldy_abs_x(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u8 expected = 0x67;
+  u8 add_cycle = 0;
+  u16 pc_start = 0XFFFC;
+  u16 addr = 0x4480;
+  u8 x_reg_offset = 0x01;
+  u16 resulting_addr = addr + x_reg_offset;
+  if ((addr >> 8) != (resulting_addr >> 8)) add_cycle++;
+  // SetUp
+  cpu->PC = pc_start;
+  cpu->X = x_reg_offset;
+  mem->Data[pc_start] = INS_LDY_ABS_X;
+  // First low bits, then high bits
+  mem->Data[0xFFFD] = addr & 0xFF;
+  mem->Data[0xFFFE] = (addr >> 8) & 0xFF;
+  mem->Data[resulting_addr] = expected;
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDY_ABS_X_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDY_ABS_X_CYC + add_cycle);
+  assert(cpu->Y == expected);
+  assert(check_ldy_flags(cpu, &cpu_copy));
+  print_test_pass("LDY_ABS_X:", used_cycles);
+}
+
+void test_ldy_abs_x_5_cyc(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+  CPU cpu_copy = *cpu;
+  u8 expected = 0x69;
+  u8 add_cycle = 0;
+  u16 pc_start = 0XFFFC;
+  u16 addr = 0x4402;
+  u8 x_reg_offset = 0xFF; // for garantueeing the crossing the page
+  u16 resulting_addr = addr + x_reg_offset;
+  if ((addr >> 8) != (resulting_addr >> 8)) add_cycle++;
+  // SetUp
+  cpu->PC = pc_start;
+  cpu->X = x_reg_offset;
+  mem->Data[pc_start] = INS_LDY_ABS_X;
+  // First low bits, then high bits
+  mem->Data[0xFFFD] = addr & 0xFF;
+  mem->Data[0xFFFE] = (addr >> 8) & 0xFF;
+  mem->Data[resulting_addr] = expected;
+  // Run
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDY_ABS_X_CYC);
+
+  // Check
+  assert(used_cycles == INS_LDY_ABS_X_CYC + add_cycle);
+  assert(cpu->Y == expected);
+  assert(check_ldy_flags(cpu, &cpu_copy));
+  print_test_pass("LDY_ABS_X_5_CYC:", used_cycles);
+}
+
 // Output helpers
+
 void print_test_pass(const char *name, s32 used_cycles)
 {
   printf("%-*s " COLOR_GREEN "[PASS]" COLOR_RESET " Used " COLOR_YELLOW "%2u" COLOR_RESET " cycles\n", TEST_NAME_WIDTH, name,

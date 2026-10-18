@@ -19,11 +19,25 @@ void test_lda_abs_x(CPU *cpu, MEM *mem);
 void test_lda_abs_x_5_cyc(CPU *cpu, MEM *mem);
 void test_lda_abs_y(CPU *cpu, MEM *mem);
 void test_lda_abs_y_5_cyc(CPU *cpu, MEM *mem);
-void test_lda_ind_x(CPU*cpu, MEM*mem);
-void test_lda_ind_y(CPU*cpu, MEM*mem);
-void test_lda_ind_y_6_cyc(CPU*cpu, MEM*mem);
-
-
+void test_lda_ind_x(CPU *cpu, MEM *mem);
+void test_lda_ind_y(CPU *cpu, MEM *mem);
+void test_lda_ind_y_6_cyc(CPU *cpu, MEM *mem);
+/* LDX Instruction */
+void test_ldx_im(CPU *cpu, MEM *mem, u8 expected);
+void test_ldx_zp(CPU *cpu, MEM *mem);
+void test_ldx_zp_y(CPU *cpu, MEM *mem);
+void test_ldx_zp_y_wrapping(CPU *cpu, MEM *mem);
+void test_ldx_abs(CPU *cpu, MEM *mem);
+void test_ldx_abs_y(CPU *cpu, MEM *mem);
+void test_ldx_abs_y_5_cyc(CPU *cpu, MEM *mem);
+/* LDY Instruction*/
+void test_ldy_im(CPU *cpu, MEM *mem, u8 expected);
+void test_ldy_zp(CPU *cpu, MEM *mem);
+void test_ldy_zp_x(CPU *cpu, MEM *mem);
+void test_ldy_zp_x_wrapping(CPU *cpu, MEM *mem);
+void test_ldy_abs(CPU *cpu, MEM *mem);
+void test_ldy_abs_x(CPU *cpu, MEM *mem);
+void test_ldy_abs_x_5_cyc(CPU *cpu, MEM *mem);
 
 /* JSR Instruction */
 void test_jsr_a(CPU *cpu, MEM *mem);

@@ -8,8 +8,8 @@ const char *instruction_name(Byte instr)
       return "LDA_IM";
     case INS_LDA_ZP:
       return "LDA_ZP";
-    case INS_LDA_ZPX:
-      return "LDA_ZPX";
+    case INS_LDA_ZP_X:
+      return "LDA_ZP_X";
     case INS_JSR_A:
       return "JSR_A";
     case INS_LDA_ABS:
@@ -22,6 +22,26 @@ const char *instruction_name(Byte instr)
       return "LDA_IND_X";
     case INS_LDA_IND_Y:
       return "LDA_IND_Y";
+    case INS_LDX_IM:
+      return "LDX_IM";
+    case INS_LDX_ZP:
+      return "LDX_ZP";
+    case INS_LDX_ZP_Y:
+      return "LDX_ZP_Y";
+    case INS_LDX_ABS:
+      return "LDX_ABS";
+    case INS_LDX_ABS_Y:
+      return "LDX_ABS_Y";
+    case INS_LDY_IM:
+      return "LDY_IM";
+    case INS_LDY_ZP:
+      return "LDY_ZP";
+    case INS_LDY_ZP_X:
+      return "LDY_ZP_X";
+    case INS_LDY_ABS:
+      return "LDY_ABS";
+    case INS_LDY_ABS_X:
+      return "LDY_ABS_X";
     default:
       return "UNKNOWN";
   }
@@ -56,6 +76,14 @@ Byte read_byte(MEM *mem, const u16 addr, s32 *cycles)
   return data;
 }
 
+Word read_word(MEM *mem, u16 addr, s32 *cycles)
+{
+  Byte low = read_byte(mem, addr, cycles);
+  Byte high = read_byte(mem, addr + 1, cycles);
+  Word result = low | (high << 8);
+  return result;
+}
+
 void write_word(MEM *mem, Word value, const u32 address, s32 *cycles)
 {
   // again be aware of little endian
@@ -68,6 +96,18 @@ void lda_set_flags(CPU *cpu)
 {
   cpu->Z = (cpu->A == 0);        // Set if A is zero
   cpu->N = (cpu->A & 0x80) != 0; // Set if the most significant bit is set
+}
+
+void ldx_set_flags(CPU *cpu)
+{
+  cpu->Z = (cpu->X == 0);        // Set if A is zero
+  cpu->N = (cpu->X & 0x80) != 0; // Set if the most significant bit is set
+}
+
+void ldy_set_flags(CPU *cpu)
+{
+  cpu->Z = (cpu->Y == 0);        // Set if A is zero
+  cpu->N = (cpu->Y & 0x80) != 0; // Set if the most significant bit is set
 }
 
 s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
@@ -89,6 +129,7 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
 
     switch (instr)
     {
+      // LDA
       case INS_LDA_IM:
       {
         Byte value = fetch_byte(cpu, mem, &cycles);
@@ -103,7 +144,7 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
         lda_set_flags(cpu);
         break;
       }
-      case INS_LDA_ZPX:
+      case INS_LDA_ZP_X:
       {
         Byte zero_page_addr = fetch_byte(cpu, mem, &cycles);
         // wrapping works since byte is uint8_t
@@ -113,18 +154,11 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
         lda_set_flags(cpu);
         break;
       }
-      case INS_JSR_A:
-      {
-        Word subroutine_addr = fetch_word(cpu, mem, &cycles);
-        write_word(mem, cpu->PC - 1, cpu->SP, &cycles);
-        cpu->PC = subroutine_addr;
-        cycles--;
-        break;
-      }
       case INS_LDA_ABS:
       {
         Word abs_addr = fetch_word(cpu, mem, &cycles);
         cpu->A = read_byte(mem, abs_addr, &cycles);
+        lda_set_flags(cpu);
         break;
       }
       case INS_LDA_ABS_X:
@@ -138,6 +172,7 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
           cycles--;
         }
         cpu->A = read_byte(mem, result, &cycles);
+        lda_set_flags(cpu);
         break;
       }
       case INS_LDA_ABS_Y:
@@ -151,14 +186,132 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
           cycles--;
         }
         cpu->A = read_byte(mem, result, &cycles);
+        lda_set_flags(cpu);
         break;
       }
       case INS_LDA_IND_X:
       {
+        Word zp_addr = fetch_byte(cpu, mem, &cycles);
+        zp_addr += cpu->X;
+        cycles--; // adding also consumes a cycle
+        Word effective_addr = read_word(mem, zp_addr, &cycles);
+        cpu->A = read_byte(mem, effective_addr, &cycles);
+        lda_set_flags(cpu);
         break;
       }
       case INS_LDA_IND_Y:
       {
+        Byte zp_addr = fetch_byte(cpu, mem, &cycles);
+        Word effective_addr = read_word(mem, zp_addr, &cycles);
+        u16 result = effective_addr + cpu->Y;
+        if ((effective_addr >> 8) != (result >> 8))
+        {
+          // We need 1 more cycle step if abs_addr + cpu.X exceeds a u8:
+          // abs_addr = 0x1101, cpu.X = 0xFF += 0x1200 crosses a page
+          cycles--;
+        }
+        cpu->A = read_byte(mem, result, &cycles);
+        lda_set_flags(cpu);
+        break;
+      }
+      // LDX
+      case INS_LDX_IM:
+      {
+        Byte value = fetch_byte(cpu, mem, &cycles);
+        cpu->X = value;
+        ldx_set_flags(cpu);
+        break;
+      }
+      case INS_LDX_ZP:
+      {
+        Byte zp_addr = fetch_byte(cpu, mem, &cycles);
+        cpu->X = read_byte(mem, zp_addr, &cycles);
+        ldx_set_flags(cpu);
+        break;
+      }
+      case INS_LDX_ZP_Y:
+      {
+        Byte zp_addr = fetch_byte(cpu, mem, &cycles);
+        // wrapping works since byte is uint8_t
+        zp_addr += cpu->Y;
+        cpu->X = read_byte(mem, zp_addr, &cycles);
+        cycles--;
+        ldx_set_flags(cpu);
+        break;
+      }
+      case INS_LDX_ABS:
+      {
+        Word abs_addr = fetch_word(cpu, mem, &cycles);
+        cpu->X = read_byte(mem, abs_addr, &cycles);
+        ldx_set_flags(cpu);
+        break;
+      }
+      case INS_LDX_ABS_Y:
+      {
+        Word abs_addr = fetch_word(cpu, mem, &cycles);
+        u16 result = abs_addr + cpu->Y;
+        if ((abs_addr >> 8) != (result >> 8))
+        {
+          // We need 1 more cycle step if abs_addr + cpu.X exceeds a u8:
+          // abs_addr = 0x1101, cpu.X = 0xFF += 0x1200 crosses a page
+          cycles--;
+        }
+        cpu->X = read_byte(mem, result, &cycles);
+        ldx_set_flags(cpu);
+        break;
+      }
+      case INS_LDY_IM:
+      {
+        Byte value = fetch_byte(cpu, mem, &cycles);
+        cpu->Y = value;
+        ldy_set_flags(cpu);
+        break;
+      }
+      case INS_LDY_ZP:
+      {
+        Byte zp_addr = fetch_byte(cpu, mem, &cycles);
+        cpu->Y = read_byte(mem, zp_addr, &cycles);
+        ldy_set_flags(cpu);
+        break;
+      }
+      case INS_LDY_ZP_X:
+      {
+        Byte zp_addr = fetch_byte(cpu, mem, &cycles);
+        // wrapping works since byte is uint8_t
+        zp_addr += cpu->X;
+        cpu->Y = read_byte(mem, zp_addr, &cycles);
+        cycles--;
+        ldy_set_flags(cpu);
+        break;
+      }
+      case INS_LDY_ABS:
+      {
+        Word abs_addr = fetch_word(cpu, mem, &cycles);
+        cpu->Y = read_byte(mem, abs_addr, &cycles);
+        ldy_set_flags(cpu);
+        break;
+      }
+      case INS_LDY_ABS_X:
+      {
+        Word abs_addr = fetch_word(cpu, mem, &cycles);
+        u16 result = abs_addr + cpu->X;
+        if ((abs_addr >> 8) != (result >> 8))
+        {
+          // We need 1 more cycle step if abs_addr + cpu.X exceeds a u8:
+          // abs_addr = 0x1101, cpu.X = 0xFF += 0x1200 crosses a page
+          cycles--;
+        }
+        cpu->Y = read_byte(mem, result, &cycles);
+        ldy_set_flags(cpu);
+        break;
+      }
+      // JSR
+      case INS_JSR_A:
+      {
+        Word subroutine_addr = fetch_word(cpu, mem, &cycles);
+        write_word(mem, cpu->PC - 1, cpu->SP, &cycles);
+        cpu->PC = subroutine_addr;
+        cycles--;
         break;
       }
       default:
