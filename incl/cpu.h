@@ -37,8 +37,6 @@ Byte read_byte(MEM *mem, const u16 addr, s32 *cycles);
 void reset_cpu(CPU *cpu, MEM *mem);
 void print_cpu(const CPU *cpu);
 
-void lda_set_flags(CPU *cpu);
-void ldx_set_flags(CPU *cpu);
-void ldy_set_flags(CPU *cpu);
+void set_load_flags(CPU*cpu, Byte * reg);
 
 #endif // CPU_H

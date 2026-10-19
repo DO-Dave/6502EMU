@@ -48,4 +48,12 @@ void test_load_abs_x(const Byte expec_out, Byte *out_reg, Byte *x_reg, const u8 
 
 void test_load_abs_y(const Byte expec_out, Byte *out_reg, Byte *y_reg, const u8 opcode, CPU *cpu, MEM *mem);
 
+void test_jmp_abs(const Word target_addr, CPU *cpu, MEM *mem);
+
+void test_jmp_abs(const Word target_addr, CPU *cpu, MEM *mem);
+
+void test_jmp_ind(const Word ind_addr, CPU *cpu, MEM *mem);
+void test_store_zp(const Byte zp_addr, const Byte expected, Byte *in_reg, const u8 opcode, CPU *cpu, MEM *mem);
+void test_store_zp_x(const Byte zp_addr, const Byte expected, Byte *in_reg, Byte *x_reg, const u8 opcode, CPU *cpu, MEM *mem);
+void test_store_zp_x_wrap(CPU *cpu, MEM *mem);
 #endif /* TEST_H */

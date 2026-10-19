@@ -11,22 +11,19 @@ static bool check_load_flags(const CPU *cpu, const CPU *cpu_copy, Byte value)
 }
 
 bool check_all_flags_same(const CPU *cpu, const CPU *cpu_copy)
-
 {
-
-  return (cpu->C == cpu_copy->C) && (cpu->Z == cpu_copy->Z) && (cpu->I == cpu_copy->I) && (cpu->D == cpu_copy->D) &&
-
-         (cpu->B == cpu_copy->B) && (cpu->V == cpu_copy->V) && (cpu->N == cpu_copy->N);
+  return cpu->C == cpu_copy->C && cpu->Z == cpu_copy->Z && cpu->I == cpu_copy->I && cpu->D == cpu_copy->D &&
+         cpu->B == cpu_copy->B && cpu->V == cpu_copy->V && cpu->N == cpu_copy->N;
 }
 
 void test_do_nothing(CPU *cpu, MEM *mem)
-
 {
-
   reset_cpu(cpu, mem);
   cpu->PC = 0xFFFC;
+
   CPU cpu_copy = *cpu;
   s32 used_cycles = cpu_execute(cpu, mem, 0);
+
   assert(used_cycles == 0);
   assert(check_all_flags_same(cpu, &cpu_copy));
 
@@ -36,89 +33,99 @@ void test_do_nothing(CPU *cpu, MEM *mem)
 void test_exe_full_inst_always_lda_im(CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
-  CPU cpu_copy = *cpu;
-  u16 pc_start = 0XFFFC;
-  u8 expected = 0x67;
-  // SetUp
+
+  u16 pc_start = 0xFFFC;
+  Byte expected = 0x67;
   cpu->PC = pc_start;
+  CPU cpu_copy = *cpu;
+
   mem->Data[pc_start] = INS_LDA_IM;
-  mem->Data[0xFFFD] = expected;
-  // Run
+  mem->Data[pc_start + 1] = expected;
+
   s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_IM_CYC - 1);
-  // Check
+
   assert(used_cycles == INS_LDA_IM_CYC);
   assert(cpu->A == expected);
-  assert(check_load_flags(cpu, &cpu_copy, cpu->A));
+  assert(check_load_flags(cpu, &cpu_copy, expected));
+
   print_test_pass("EXE_FULL_LDA_IM:", used_cycles);
 }
 
 void test_exe_full_inst_always_lda_zp(CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
-  CPU cpu_copy = *cpu;
-  u32 expected = 0x2;
-  u16 zp_offset = 0x0042;
+
   u16 pc_start = 0xFFFC;
+  Byte zp_address = 0x42;
+  Byte expected = 0x02;
   cpu->PC = pc_start;
-  // SetUp
+  CPU cpu_copy = *cpu;
+
   mem->Data[pc_start] = INS_LDA_ZP;
-  mem->Data[zp_offset] = expected;
-  mem->Data[0xFFFD] = zp_offset;
-  // Run
+  mem->Data[pc_start + 1] = zp_address;
+  mem->Data[zp_address] = expected;
+
   s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_ZP_CYC - 1);
-  // Check
+
   assert(used_cycles == INS_LDA_ZP_CYC);
   assert(cpu->A == expected);
-  assert(check_load_flags(cpu, &cpu_copy, cpu->A));
+  assert(check_load_flags(cpu, &cpu_copy, expected));
+
   print_test_pass("EXE_FULL_LDA_ZP:", used_cycles);
 }
 
 void test_exe_full_inst_always_lda_zpx(CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
-  CPU cpu_copy = *cpu;
-  u32 expected = 0x3;
-  u16 zp_offset = 0x0042;
-  u16 x_reg_value = 0x5;
-  // Setting up the X register manually
-  cpu->X = x_reg_value;
+
   u16 pc_start = 0xFFFC;
+  Byte zp_offset = 0xFE;
+  Byte x_value = 0x05;
+  Byte effective_addr = (Byte)(zp_offset + x_value); /* $FE + $05 wraps to $03. */
+  Byte expected = 0x03;
+  Byte wrong_value = (Byte)(expected ^ 0xFF);
+
   cpu->PC = pc_start;
-  // SetUp
+  cpu->X = x_value;
+  CPU cpu_copy = *cpu;
+
   mem->Data[pc_start] = INS_LDA_ZP_X;
-  mem->Data[0xFFFD] = zp_offset;
-  mem->Data[zp_offset + x_reg_value] = expected;
-  // Run
-  s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_ZP_X_CYC - 3);
-  // Check
+  mem->Data[pc_start + 1] = zp_offset;
+  mem->Data[effective_addr] = expected;
+  mem->Data[0x0103] = wrong_value; /* Detect a non-wrapping 16-bit addition. */
+
+  s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_ZP_X_CYC - 1);
+
   assert(used_cycles == INS_LDA_ZP_X_CYC);
   assert(cpu->A == expected);
-  assert(check_load_flags(cpu, &cpu_copy, cpu->A));
+  assert(check_load_flags(cpu, &cpu_copy, expected));
+
   print_test_pass("EXE_FULL_LDA_ZPX:", used_cycles);
 }
 
 void test_exe_full_inst_always_jsr_a(CPU *cpu, MEM *mem)
 {
-  /*
- Important this garantuees that if i start a inst always finishes the no matter if we overshoot the cycles that the cpu was*
- given*/
+  /* An instruction that has started must finish, even if it exceeds the cycle budget. */
   reset_cpu(cpu, mem);
-  CPU cpu_copy = *cpu;
-  u32 expected = 0x4;
-  u16 jmp_addr = 0x4342;
+
   u16 pc_start = 0xFFFC;
+  u16 jmp_addr = 0x4342;
+  Byte expected = 0x04;
   cpu->PC = pc_start;
+  CPU cpu_copy = *cpu;
+
   mem->Data[pc_start] = INS_JSR_A;
-  // First low bits, then high bits
-  mem->Data[0xFFFD] = jmp_addr & 0xFF;
-  mem->Data[0xFFFE] = (jmp_addr >> 8) & 0xFF;
+  mem->Data[0xFFFD] = (Byte)(jmp_addr & 0xFF);
+  mem->Data[0xFFFE] = (Byte)(jmp_addr >> 8);
   mem->Data[jmp_addr] = INS_LDA_IM;
   mem->Data[jmp_addr + 1] = expected;
+
   s32 used_cycles = cpu_execute(cpu, mem, INS_JSR_A_CYC + 1);
-  // Check
-  assert(used_cycles == (INS_JSR_A_CYC + INS_LDA_IM_CYC));
+
+  assert(used_cycles == INS_JSR_A_CYC + INS_LDA_IM_CYC);
   assert(cpu->A == expected);
   assert(check_all_flags_same(cpu, &cpu_copy));
+
   print_test_pass("EXE_FULL_JSR_A:", used_cycles);
 }
 
@@ -126,266 +133,448 @@ void test_garbage_inst(CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
   CPU cpu_copy = *cpu;
-  u16 pc_start = 0XFFFC;
+  u16 pc_start = 0xFFFC;
+  cpu->PC = pc_start;
   mem->Data[pc_start] = NULL_INS;
+
   s32 used_cycles = cpu_execute(cpu, mem, 5);
+
   assert(used_cycles == 1);
   assert(check_all_flags_same(cpu, &cpu_copy));
+
   print_test_pass("GARBAGE_INS:", used_cycles);
 }
 
 void test_jsr_a(CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
-  CPU cpu_copy = *cpu;
-  u32 expected = 0x4;
-  u16 jmp_addr = 0x4342;
+
   u16 pc_start = 0xFFFC;
+  u16 jmp_addr = 0x4342;
+  Byte expected = 0x04;
   cpu->PC = pc_start;
+  CPU cpu_copy = *cpu;
+
   mem->Data[pc_start] = INS_JSR_A;
-  // First low bits, then high bits
-  mem->Data[0xFFFD] = jmp_addr & 0xFF;
-  mem->Data[0xFFFE] = (jmp_addr >> 8) & 0xFF;
+  mem->Data[0xFFFD] = (Byte)(jmp_addr & 0xFF);
+  mem->Data[0xFFFE] = (Byte)(jmp_addr >> 8);
   mem->Data[jmp_addr] = INS_LDA_IM;
   mem->Data[jmp_addr + 1] = expected;
+
   s32 used_cycles = cpu_execute(cpu, mem, INS_JSR_A_CYC + INS_LDA_IM_CYC);
-  // Check
+
   assert(used_cycles == INS_JSR_A_CYC + INS_LDA_IM_CYC);
   assert(cpu->A == expected);
   assert(check_all_flags_same(cpu, &cpu_copy));
+
   print_test_pass("JSR_A:", used_cycles);
 }
 
 void test_lda_ind_x(CPU *cpu, MEM *mem)
 {
-  /*
-The 16 bits + X register after the instruction are the next address; The go to that address and look at the 8 bits after
-it that is the value we want in A*
-  */
+  /* LDA ($nn,X): add X to the zero-page operand, read a 16-bit pointer,
+     then load A from the address stored in that pointer. */
   reset_cpu(cpu, mem);
+
   CPU cpu_copy = *cpu;
   cpu->X = 0x04;
-  u16 pc_start = 0XFFFC;
-  u8 expected = 0x67;
+  u16 pc_start = 0xFFFC;
+  Byte expected = 0x67;
+
+  cpu->PC = pc_start;
   mem->Data[pc_start] = INS_LDA_IND_X;
-  mem->Data[0xFFFD] = 0x02;
+  mem->Data[pc_start + 1] = 0x02;
   mem->Data[0x0006] = 0x00;
   mem->Data[0x0007] = 0x80;
   mem->Data[0x8000] = expected;
-  // Run
+
   s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_IND_X_CYC);
-  // Check
+
   assert(used_cycles == INS_LDA_IND_X_CYC);
   assert(cpu->A == expected);
-  assert(check_load_flags(cpu, &cpu_copy, cpu->A));
+  assert(check_load_flags(cpu, &cpu_copy, expected));
+
   print_test_pass("LDA_IND_X:", used_cycles);
 }
 
 void test_lda_ind_y(CPU *cpu, MEM *mem)
 {
-  /*
- LDA ($nn),Y:*
- Read a 16-bit address from zero page, add Y,*
- then load A from the resulting address.*
- Do not cross a page boundary.*+
-*/
+  /* LDA ($nn),Y: read a 16-bit address from zero page, add Y,
+     and load from the resulting address. No page crossing in this test. */
   reset_cpu(cpu, mem);
-  u8 add_cycle = 0;
+
   CPU cpu_copy = *cpu;
   cpu->Y = 0x04;
-  u8 zp_addr = 0x02;
+
+  Byte zp_addr = 0x02;
   u16 base_addr = 0x8002;
-  u16 addr_result = base_addr + cpu->Y;
-  if ((base_addr >> 8) != (addr_result >> 8)) add_cycle++;
+  u16 addr_result = (u16)(base_addr + cpu->Y);
   u16 pc_start = 0xFFFC;
-  u8 expected = 0x67;
-  // Instruction and operand
+  Byte expected = 0x67;
+
+  cpu->PC = pc_start;
   mem->Data[pc_start] = INS_LDA_IND_Y;
-  mem->Data[0xFFFD] = zp_addr;
-  // Zero-page pointer contains 0x8002 (little-endian)
-  mem->Data[0x0002] = 0x02;
-  mem->Data[0x0003] = 0x80;
-  // Effective address: 0x8002 + 0x04 = 0x8006
+  mem->Data[pc_start + 1] = zp_addr;
+  mem->Data[0x0002] = (Byte)(base_addr & 0xFF);
+  mem->Data[0x0003] = (Byte)(base_addr >> 8);
   mem->Data[addr_result] = expected;
-  // Run
+
   s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_IND_Y_CYC);
-  // Check
-  assert(used_cycles == INS_LDA_IND_Y_CYC + add_cycle);
+
+  assert((base_addr >> 8) == (addr_result >> 8));
+  assert(used_cycles == INS_LDA_IND_Y_CYC);
   assert(cpu->A == expected);
-  assert(check_load_flags(cpu, &cpu_copy, cpu->A));
+  assert(check_load_flags(cpu, &cpu_copy, expected));
+
   print_test_pass("LDA_IND_Y:", used_cycles);
 }
 
 void test_lda_ind_y_6_cyc(CPU *cpu, MEM *mem)
 {
-  /*
- LDA ($nn),Y:
- Test page-boundary crossing.*
- Base address:      0x80FE*
- Y register:        0x04*
- Effective address: 0x8102*
- Expected cycles:   6*
-*/
+  /* LDA ($nn),Y page-crossing case:
+     base = $80FE, Y = $04, effective address = $8102, cycles = 6. */
   reset_cpu(cpu, mem);
+
   CPU cpu_copy = *cpu;
   cpu->Y = 0x04;
-  u8 zp_addr = 0x02;
+
+  Byte zp_addr = 0x02;
   u16 base_addr = 0x80FE;
-  u16 addr_result = base_addr + cpu->Y;
+  u16 addr_result = (u16)(base_addr + cpu->Y);
   u16 pc_start = 0xFFFC;
-  u8 expected = 0x67;
-  // Instruction and operand
+  Byte expected = 0x67;
+
+  cpu->PC = pc_start;
   mem->Data[pc_start] = INS_LDA_IND_Y;
-  mem->Data[0xFFFD] = zp_addr;
-  // Zero-page pointer contains 0x80FE (little-endian)
-  mem->Data[0x0002] = 0xFE;
-  mem->Data[0x0003] = 0x80;
-  // Effective address: 0x80FE + 0x04 = 0x8102
+  mem->Data[pc_start + 1] = zp_addr;
+  mem->Data[0x0002] = (Byte)(base_addr & 0xFF);
+  mem->Data[0x0003] = (Byte)(base_addr >> 8);
   mem->Data[addr_result] = expected;
-  // Run
+
   s32 used_cycles = cpu_execute(cpu, mem, INS_LDA_IND_Y_CYC);
-  // Check
+
   assert((base_addr >> 8) != (addr_result >> 8));
   assert(used_cycles == INS_LDA_IND_Y_CYC + 1);
   assert(cpu->A == expected);
-  assert(check_load_flags(cpu, &cpu_copy, cpu->A));
+  assert(check_load_flags(cpu, &cpu_copy, expected));
+
   print_test_pass("LDA_IND_Y_6_CYC:", used_cycles);
 }
 
-void test_load_imm(const Byte expec_out, Byte *out_reg, const u8 opcode, CPU *cpu, MEM *mem)
+void test_load_imm(const Byte expected, Byte *out_reg, const u8 opcode, CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
+
   CPU cpu_copy = *cpu;
-  u8 inst_cycles = cyc_from_opcode(opcode);
-  mem->Data[cpu->PC] = opcode;
-  mem->Data[cpu->PC + 1] = expec_out;
+  u16 pc_start = cpu->PC;
+  u8 cycles = cyc_from_opcode(opcode);
 
-  s32 used_cycles = cpu_execute(cpu, mem, inst_cycles);
+  mem->Data[pc_start] = opcode;
+  mem->Data[pc_start + 1] = expected;
 
-  assert(used_cycles == inst_cycles);
-  assert(*out_reg == expec_out);
+  s32 used_cycles = cpu_execute(cpu, mem, cycles);
+
+  assert(used_cycles == cycles);
+  assert(*out_reg == expected);
   assert(check_load_flags(cpu, &cpu_copy, *out_reg));
+
   print_test_pass("LOAD IMM", used_cycles);
 }
 
-void test_load_zp(const Byte expec_out, Byte *out_reg, const u8 opcode, CPU *cpu, MEM *mem)
+void test_load_zp(const Byte expected, Byte *out_reg, const u8 opcode, CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
-  CPU cpu_copy = *cpu;
-  u8 inst_cycles = cyc_from_opcode(opcode);
-  u16 zp_address = 0x0042;
-  mem->Data[cpu->PC] = opcode;
-  mem->Data[cpu->PC + 1] = zp_address;
-  mem->Data[zp_address] = expec_out;
 
-  s32 used_cycles = cpu_execute(cpu, mem, inst_cycles);
-  assert(used_cycles == inst_cycles);
-  assert(*out_reg == expec_out);
+  CPU cpu_copy = *cpu;
+  u16 pc_start = cpu->PC;
+  Byte zp_address = 0x42;
+  u8 cycles = cyc_from_opcode(opcode);
+
+  mem->Data[pc_start] = opcode;
+  mem->Data[pc_start + 1] = zp_address; /* One-byte zero-page operand. */
+  mem->Data[zp_address] = expected;
+
+  s32 used_cycles = cpu_execute(cpu, mem, cycles);
+
+  assert(used_cycles == cycles);
+  assert(*out_reg == expected);
   assert(check_load_flags(cpu, &cpu_copy, *out_reg));
+
   print_test_pass("LOAD ZP", used_cycles);
 }
 
-void test_load_zp_x(const Byte expec_out, Byte *out_reg, Byte *x_reg, const u8 opcode, CPU *cpu, MEM *mem)
+void test_load_zp_x(const Byte expected, Byte *out_reg, Byte *x_reg, const u8 opcode, CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
+
   CPU cpu_copy = *cpu;
-  u8 inst_cycles = cyc_from_opcode(opcode);
-  u16 zp_offset = 0x0042;
-  u16 x_reg_value = 0x5;
-  *x_reg = x_reg_value;
-  mem->Data[cpu->PC] = opcode;
-  mem->Data[cpu->PC + 1] = zp_offset;
-  mem->Data[zp_offset + *x_reg] = expec_out;
-  s32 used_cycles = cpu_execute(cpu, mem, inst_cycles);
-  assert(used_cycles == inst_cycles);
-  assert(*out_reg == expec_out);
+  u16 pc_start = cpu->PC;
+  Byte zp_offset = 0xFE;
+  Byte x_value = 0x05;
+  Byte effective_addr = (Byte)(zp_offset + x_value);
+  Word unwrapped_addr = (Word)zp_offset + x_value;
+  Byte wrong_value = (Byte)(expected ^ 0xFF);
+  u8 cycles = cyc_from_opcode(opcode);
+
+  *x_reg = x_value;
+
+  mem->Data[pc_start] = opcode;
+  mem->Data[pc_start + 1] = zp_offset;
+  mem->Data[effective_addr] = expected;
+  mem->Data[unwrapped_addr] = wrong_value;
+
+  s32 used_cycles = cpu_execute(cpu, mem, cycles);
+
+  assert(used_cycles == cycles);
+  assert(*out_reg == expected);
   assert(check_load_flags(cpu, &cpu_copy, *out_reg));
+
   print_test_pass("LOAD ZP X", used_cycles);
 }
 
-void test_load_zp_y(const Byte expec_out, Byte *out_reg, Byte *y_reg, const u8 opcode, CPU *cpu, MEM *mem)
+void test_load_zp_y(const Byte expected, Byte *out_reg, Byte *y_reg, const u8 opcode, CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
+
   CPU cpu_copy = *cpu;
-  u8 inst_cycles = cyc_from_opcode(opcode);
-  u16 zp_offset = 0x0042;
-  u16 y_reg_value = 0x5;
-  *y_reg = y_reg_value;
-  mem->Data[cpu->PC] = opcode;
-  mem->Data[cpu->PC + 1] = zp_offset;
-  mem->Data[zp_offset + *y_reg] = expec_out;
-  s32 used_cycles = cpu_execute(cpu, mem, inst_cycles);
-  assert(used_cycles == inst_cycles);
-  assert(*out_reg == expec_out);
+  u16 pc_start = cpu->PC;
+  Byte zp_offset = 0xFE;
+  Byte y_value = 0x05;
+  Byte effective_addr = (Byte)(zp_offset + y_value);
+  Word unwrapped_addr = (Word)zp_offset + y_value;
+  Byte wrong_value = (Byte)(expected ^ 0xFF);
+  u8 cycles = cyc_from_opcode(opcode);
+
+  *y_reg = y_value;
+
+  mem->Data[pc_start] = opcode;
+  mem->Data[pc_start + 1] = zp_offset;
+  mem->Data[effective_addr] = expected;
+  mem->Data[unwrapped_addr] = wrong_value;
+
+  s32 used_cycles = cpu_execute(cpu, mem, cycles);
+
+  assert(used_cycles == cycles);
+  assert(*out_reg == expected);
   assert(check_load_flags(cpu, &cpu_copy, *out_reg));
+
   print_test_pass("LOAD ZP Y", used_cycles);
 }
 
-void test_load_abs(const Byte expec_out, Byte *out_reg, const u8 opcode, CPU *cpu, MEM *mem)
+void test_load_abs(const Byte expected, Byte *out_reg, const u8 opcode, CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
+
   CPU cpu_copy = *cpu;
-  u8 inst_cycles = cyc_from_opcode(opcode);
-  u16 target_addr = 0x4480;
-  mem->Data[cpu->PC] = opcode;
-  mem->Data[cpu->PC + 1] = target_addr & 0xFF;
-  mem->Data[cpu->PC + 2] = (target_addr >> 8) & 0xFF;
-  mem->Data[target_addr] = expec_out;
+  u16 pc_start = cpu->PC;
+  Word target_addr = 0x4480;
+  u8 cycles = cyc_from_opcode(opcode);
 
-  s32 used_cycles = cpu_execute(cpu, mem, inst_cycles);
+  mem->Data[pc_start] = opcode;
+  mem->Data[pc_start + 1] = (Byte)(target_addr & 0xFF);
+  mem->Data[pc_start + 2] = (Byte)(target_addr >> 8);
+  mem->Data[target_addr] = expected;
 
-  assert(used_cycles == inst_cycles);
-  assert(*out_reg == expec_out);
+  s32 used_cycles = cpu_execute(cpu, mem, cycles);
+
+  assert(used_cycles == cycles);
+  assert(*out_reg == expected);
   assert(check_load_flags(cpu, &cpu_copy, *out_reg));
+
   print_test_pass("LOAD ABS", used_cycles);
 }
 
-void test_load_abs_x(const Byte expec_out, Byte *out_reg, Byte *x_reg, const u8 opcode, CPU *cpu, MEM *mem)
+void test_load_abs_x(const Byte expected, Byte *out_reg, Byte *x_reg, const u8 opcode, CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
-  CPU cpu_copy = *cpu;
-  u8 inst_cycles = cyc_from_opcode(opcode);
-  u16 target_addr = 0x4480;
-  u8 x_val = 0x01;
-  *x_reg = x_val;
-  u16 result_addr = target_addr + x_val;
-  if ((target_addr >> 8) != (result_addr >> 8)) inst_cycles++;
-  mem->Data[cpu->PC] = opcode;
-  mem->Data[cpu->PC + 1] = target_addr & 0xFF;
-  mem->Data[cpu->PC + 2] = (target_addr >> 8) & 0xFF;
-  mem->Data[result_addr] = expec_out;
 
-  s32 used_cycles = cpu_execute(cpu, mem, inst_cycles);
-  assert(used_cycles == inst_cycles);
-  assert(*out_reg == expec_out);
+  CPU cpu_copy = *cpu;
+  u16 pc_start = cpu->PC;
+  Word target_addr = 0x4480;
+  Byte x_value = 0x01;
+  Word result_addr = (Word)(target_addr + x_value);
+  u8 cycles = cyc_from_opcode(opcode);
+
+  *x_reg = x_value;
+  if ((target_addr >> 8) != (result_addr >> 8)) cycles++;
+
+  mem->Data[pc_start] = opcode;
+  mem->Data[pc_start + 1] = (Byte)(target_addr & 0xFF);
+  mem->Data[pc_start + 2] = (Byte)(target_addr >> 8);
+  mem->Data[result_addr] = expected;
+
+  s32 used_cycles = cpu_execute(cpu, mem, cycles);
+
+  assert(used_cycles == cycles);
+  assert(*out_reg == expected);
   assert(check_load_flags(cpu, &cpu_copy, *out_reg));
+
   print_test_pass("LOAD ABS X", used_cycles);
 }
 
-void test_load_abs_y(const Byte expec_out, Byte *out_reg, Byte *y_reg, const u8 opcode, CPU *cpu, MEM *mem)
+void test_load_abs_y(const Byte expected, Byte *out_reg, Byte *y_reg, const u8 opcode, CPU *cpu, MEM *mem)
 {
   reset_cpu(cpu, mem);
-  CPU cpu_copy = *cpu;
-  u8 inst_cycles = cyc_from_opcode(opcode);
-  u16 target_addr = 0x4480;
-  u8 y_val = 0x01;
-  *y_reg = y_val;
-  u16 result_addr = target_addr + y_val;
-  if ((target_addr >> 8) != (result_addr >> 8)) inst_cycles++;
-  mem->Data[cpu->PC] = opcode;
-  mem->Data[cpu->PC + 1] = target_addr & 0xFF;
-  mem->Data[cpu->PC + 2] = (target_addr >> 8) & 0xFF;
-  mem->Data[result_addr] = expec_out;
 
-  s32 used_cycles = cpu_execute(cpu, mem, inst_cycles);
-  assert(used_cycles == inst_cycles);
-  assert(*out_reg == expec_out);
+  CPU cpu_copy = *cpu;
+  u16 pc_start = cpu->PC;
+  Word target_addr = 0x4480;
+  Byte y_value = 0x01;
+  Word result_addr = (Word)(target_addr + y_value);
+  u8 cycles = cyc_from_opcode(opcode);
+
+  *y_reg = y_value;
+  if ((target_addr >> 8) != (result_addr >> 8)) cycles++;
+
+  mem->Data[pc_start] = opcode;
+  mem->Data[pc_start + 1] = (Byte)(target_addr & 0xFF);
+  mem->Data[pc_start + 2] = (Byte)(target_addr >> 8);
+  mem->Data[result_addr] = expected;
+
+  s32 used_cycles = cpu_execute(cpu, mem, cycles);
+
+  assert(used_cycles == cycles);
+  assert(*out_reg == expected);
   assert(check_load_flags(cpu, &cpu_copy, *out_reg));
+
   print_test_pass("LOAD ABS Y", used_cycles);
+}
+
+void test_jmp_abs(const Word target_addr, CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+
+  CPU cpu_copy = *cpu;
+  u16 pc_start = cpu->PC;
+  mem->Data[pc_start] = INS_JMP_A;
+  mem->Data[pc_start + 1] = (Byte)(target_addr & 0xFF);
+  mem->Data[pc_start + 2] = (Byte)(target_addr >> 8);
+
+  s32 expected_cycles = cyc_from_opcode(INS_JMP_A);
+  s32 used_cycles = cpu_execute(cpu, mem, expected_cycles);
+
+  assert(used_cycles == expected_cycles);
+  assert(cpu->PC == target_addr);
+  assert(check_all_flags_same(cpu, &cpu_copy));
+
+  print_test_pass("JMP ABS", used_cycles);
+}
+
+void test_jmp_ind(const Word ind_addr, CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+
+  CPU cpu_copy = *cpu;
+  u16 pc_start = cpu->PC;
+  mem->Data[pc_start] = INS_JMP_IND;
+  mem->Data[pc_start + 1] = (Byte)(ind_addr & 0xFF);
+  mem->Data[pc_start + 2] = (Byte)(ind_addr >> 8);
+
+  Word target_addr = 0x1234;
+  mem->Data[ind_addr] = (Byte)(target_addr & 0xFF);
+  mem->Data[ind_addr + 1] = (Byte)(target_addr >> 8);
+
+  s32 expected_cycles = cyc_from_opcode(INS_JMP_IND);
+  s32 used_cycles = cpu_execute(cpu, mem, expected_cycles);
+
+  assert(used_cycles == expected_cycles);
+  assert(cpu->PC == target_addr);
+  assert(check_all_flags_same(cpu, &cpu_copy));
+
+  print_test_pass("JMP IND", used_cycles);
+}
+
+/* Store instruction tests. Zero-page operands and target addresses are Bytes. */
+void test_store_zp(const Byte zp_addr, const Byte expected, Byte *in_reg, const u8 opcode, CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+
+  CPU cpu_copy = *cpu;
+  u16 pc_start = cpu->PC;
+  u8 cycles = cyc_from_opcode(opcode);
+  Byte initial_value = (Byte)(expected ^ 0xFF);
+
+  *in_reg = expected;
+
+  mem->Data[pc_start] = opcode;
+  mem->Data[pc_start + 1] = zp_addr; /* Only one operand byte. */
+  mem->Data[zp_addr] = initial_value;
+
+  s32 used_cycles = cpu_execute(cpu, mem, cycles);
+
+  assert(used_cycles == cycles);
+  assert(mem->Data[zp_addr] == expected);
+  assert(check_all_flags_same(cpu, &cpu_copy));
+
+  print_test_pass("STA ZP", used_cycles);
+}
+
+void test_store_zp_x(const Byte zp_addr, const Byte expected, Byte *in_reg, Byte *x_reg, const u8 opcode, CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+
+  CPU cpu_copy = *cpu;
+  u16 pc_start = cpu->PC;
+  Byte x_value = 0x04;
+  Byte effective_addr = (Byte)(zp_addr + x_value);
+  Word unwrapped_addr = (Word)zp_addr + x_value;
+  Byte initial_value = (Byte)(expected ^ 0xFF);
+  u8 cycles = cyc_from_opcode(opcode);
+
+  *in_reg = expected;
+  *x_reg = x_value;
+
+  mem->Data[pc_start] = opcode;
+  mem->Data[pc_start + 1] = zp_addr; /* Only one operand byte. */
+  mem->Data[effective_addr] = initial_value;
+
+  if (unwrapped_addr > 0x00FF) mem->Data[unwrapped_addr] = initial_value;
+
+  s32 used_cycles = cpu_execute(cpu, mem, cycles);
+
+  assert(used_cycles == cycles);
+  assert(mem->Data[effective_addr] == expected);
+  assert(check_all_flags_same(cpu, &cpu_copy));
+
+  if (unwrapped_addr > 0x00FF) assert(mem->Data[unwrapped_addr] == initial_value);
+
+  print_test_pass("STA ZP X", used_cycles);
+}
+
+void test_store_zp_x_wrap(CPU *cpu, MEM *mem)
+{
+  reset_cpu(cpu, mem);
+
+  u16 pc_start = cpu->PC;
+  Byte expected = 0xA5;
+  Byte initial_value = 0x5A;
+  Byte zp_offset = 0xFE;
+  Byte x_value = 0x04;
+  Byte effective_addr = (Byte)(zp_offset + x_value); /* $02 */
+  Word unwrapped_addr = (Word)zp_offset + x_value;   /* $0102 */
+
+  cpu->A = expected;
+  cpu->X = x_value;
+  CPU cpu_copy = *cpu;
+
+  mem->Data[pc_start] = INS_STA_ZP_X;
+  mem->Data[pc_start + 1] = zp_offset;
+  mem->Data[effective_addr] = initial_value;
+  mem->Data[unwrapped_addr] = initial_value;
+
+  s32 expected_cycles = cyc_from_opcode(INS_STA_ZP_X);
+  s32 used_cycles = cpu_execute(cpu, mem, expected_cycles);
+
+  assert(used_cycles == expected_cycles);
+  assert(mem->Data[effective_addr] == expected);
+  assert(mem->Data[unwrapped_addr] == initial_value);
+  assert(check_all_flags_same(cpu, &cpu_copy));
+
+  print_test_pass("STA ZP X WRAP", used_cycles);
 }
 
 void print_test_pass(const char *name, s32 used_cycles)
 {
-  printf("%-*s " COLOR_GREEN "[PASS]" COLOR_RESET " Used " COLOR_YELLOW "%2u" COLOR_RESET " cycles\n", TEST_NAME_WIDTH, name,
+  printf("%-*s " COLOR_GREEN "[PASS]" COLOR_RESET " Used " COLOR_YELLOW "%2d" COLOR_RESET " cycles\n", TEST_NAME_WIDTH, name,
          used_cycles);
 }

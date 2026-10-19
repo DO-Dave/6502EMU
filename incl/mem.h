@@ -19,5 +19,5 @@ typedef struct
   Byte Data[MAX_MEM];
 } MEM;
 void initialize_memory(MEM *mem);
-void print_memory(const MEM *mem, u32 start, u32 end);
+void print_memory(const char *filename, const MEM *mem, u32 start, u32 end);
 #endif // MEM_H

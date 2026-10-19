@@ -12,6 +12,10 @@ u8 cyc_from_opcode(Byte opcode)
       return INS_LDA_ZP_X_CYC;
     case INS_JSR_A:
       return INS_JSR_A_CYC;
+    case INS_JMP_A:
+      return INS_JMP_A_CYC;
+    case INS_JMP_IND:
+      return INS_JMP_IND_CYC;
     case INS_LDA_ABS:
       return INS_LDA_ABS_CYC;
     case INS_LDA_ABS_X:
@@ -42,6 +46,20 @@ u8 cyc_from_opcode(Byte opcode)
       return INS_LDY_ABS_CYC;
     case INS_LDY_ABS_X:
       return INS_LDY_ABS_X_CYC;
+    case INS_STA_ZP:
+      return INS_STA_ZP_CYC;
+    case INS_STA_ZP_X:
+      return INS_STA_ZP_X_CYC;
+    case INS_STA_ABS:
+      return INS_STA_ABS_CYC;
+    case INS_STA_ABS_X:
+      return INS_STA_ABS_X_CYC;
+    case INS_STA_ABS_Y:
+      return INS_STA_ABS_Y_CYC;
+    case INS_STA_IND_X:
+      return INS_STA_IND_X_CYC;
+    case INS_STA_IND_Y:
+      return INS_STA_IND_Y_CYC;
     default:
       return (u8)-1;
   }

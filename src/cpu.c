@@ -42,6 +42,24 @@ const char *instruction_name(Byte instr)
       return "LDY_ABS";
     case INS_LDY_ABS_X:
       return "LDY_ABS_X";
+    case INS_JMP_A:
+      return "JMP_A";
+    case INS_JMP_IND:
+      return "JMP_IND";
+    case INS_STA_ZP:
+      return "STA_ZP";
+    case INS_STA_ZP_X:
+      return "STA_ZP_X";
+    case INS_STA_ABS:
+      return "STA_ABS";
+    case INS_STA_ABS_X:
+      return "STA_ABS_X";
+    case INS_STA_ABS_Y:
+      return "STA_ABS_Y";
+    case INS_STA_IND_X:
+      return "STA_IND_X";
+    case INS_STA_IND_Y:
+      return "STA_IND_Y";
     default:
       return "UNKNOWN";
   }
@@ -92,22 +110,10 @@ void write_word(MEM *mem, Word value, const u32 address, s32 *cycles)
   (*cycles) -= 2;
 }
 
-void lda_set_flags(CPU *cpu)
+void set_load_flags(CPU *cpu, Byte *reg)
 {
-  cpu->Z = (cpu->A == 0);        // Set if A is zero
-  cpu->N = (cpu->A & 0x80) != 0; // Set if the most significant bit is set
-}
-
-void ldx_set_flags(CPU *cpu)
-{
-  cpu->Z = (cpu->X == 0);        // Set if A is zero
-  cpu->N = (cpu->X & 0x80) != 0; // Set if the most significant bit is set
-}
-
-void ldy_set_flags(CPU *cpu)
-{
-  cpu->Z = (cpu->Y == 0);        // Set if A is zero
-  cpu->N = (cpu->Y & 0x80) != 0; // Set if the most significant bit is set
+  cpu->Z = (*reg == 0);        // Set if A is zero
+  cpu->N = (*reg & 0x80) != 0; // Set if the most significant bit is set
 }
 
 s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
@@ -134,14 +140,14 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
       {
         Byte value = fetch_byte(cpu, mem, &cycles);
         cpu->A = value;
-        lda_set_flags(cpu);
+        set_load_flags(cpu, &cpu->A);
         break;
       }
       case INS_LDA_ZP:
       {
         Byte zero_page_addr = fetch_byte(cpu, mem, &cycles);
         cpu->A = read_byte(mem, zero_page_addr, &cycles);
-        lda_set_flags(cpu);
+        set_load_flags(cpu, &cpu->A);
         break;
       }
       case INS_LDA_ZP_X:
@@ -151,14 +157,14 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
         zero_page_addr += cpu->X;
         cpu->A = read_byte(mem, zero_page_addr, &cycles);
         cycles--;
-        lda_set_flags(cpu);
+        set_load_flags(cpu, &cpu->A);
         break;
       }
       case INS_LDA_ABS:
       {
         Word abs_addr = fetch_word(cpu, mem, &cycles);
         cpu->A = read_byte(mem, abs_addr, &cycles);
-        lda_set_flags(cpu);
+        set_load_flags(cpu, &cpu->A);
         break;
       }
       case INS_LDA_ABS_X:
@@ -172,7 +178,7 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
           cycles--;
         }
         cpu->A = read_byte(mem, result, &cycles);
-        lda_set_flags(cpu);
+        set_load_flags(cpu, &cpu->A);
         break;
       }
       case INS_LDA_ABS_Y:
@@ -186,7 +192,7 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
           cycles--;
         }
         cpu->A = read_byte(mem, result, &cycles);
-        lda_set_flags(cpu);
+        set_load_flags(cpu, &cpu->A);
         break;
       }
       case INS_LDA_IND_X:
@@ -196,7 +202,7 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
         cycles--; // adding also consumes a cycle
         Word effective_addr = read_word(mem, zp_addr, &cycles);
         cpu->A = read_byte(mem, effective_addr, &cycles);
-        lda_set_flags(cpu);
+        set_load_flags(cpu, &cpu->A);
         break;
       }
       case INS_LDA_IND_Y:
@@ -211,7 +217,7 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
           cycles--;
         }
         cpu->A = read_byte(mem, result, &cycles);
-        lda_set_flags(cpu);
+        set_load_flags(cpu, &cpu->A);
         break;
       }
       // LDX
@@ -219,14 +225,14 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
       {
         Byte value = fetch_byte(cpu, mem, &cycles);
         cpu->X = value;
-        ldx_set_flags(cpu);
+        set_load_flags(cpu, &cpu->X);
         break;
       }
       case INS_LDX_ZP:
       {
         Byte zp_addr = fetch_byte(cpu, mem, &cycles);
         cpu->X = read_byte(mem, zp_addr, &cycles);
-        ldx_set_flags(cpu);
+        set_load_flags(cpu, &cpu->X);
         break;
       }
       case INS_LDX_ZP_Y:
@@ -236,14 +242,14 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
         zp_addr += cpu->Y;
         cpu->X = read_byte(mem, zp_addr, &cycles);
         cycles--;
-        ldx_set_flags(cpu);
+        set_load_flags(cpu, &cpu->X);
         break;
       }
       case INS_LDX_ABS:
       {
         Word abs_addr = fetch_word(cpu, mem, &cycles);
         cpu->X = read_byte(mem, abs_addr, &cycles);
-        ldx_set_flags(cpu);
+        set_load_flags(cpu, &cpu->X);
         break;
       }
       case INS_LDX_ABS_Y:
@@ -257,21 +263,22 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
           cycles--;
         }
         cpu->X = read_byte(mem, result, &cycles);
-        ldx_set_flags(cpu);
+        set_load_flags(cpu, &cpu->X);
         break;
       }
+
       case INS_LDY_IM:
       {
         Byte value = fetch_byte(cpu, mem, &cycles);
         cpu->Y = value;
-        ldy_set_flags(cpu);
+        set_load_flags(cpu, &cpu->Y);
         break;
       }
       case INS_LDY_ZP:
       {
         Byte zp_addr = fetch_byte(cpu, mem, &cycles);
         cpu->Y = read_byte(mem, zp_addr, &cycles);
-        ldy_set_flags(cpu);
+        set_load_flags(cpu, &cpu->Y);
         break;
       }
       case INS_LDY_ZP_X:
@@ -281,14 +288,14 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
         zp_addr += cpu->X;
         cpu->Y = read_byte(mem, zp_addr, &cycles);
         cycles--;
-        ldy_set_flags(cpu);
+        set_load_flags(cpu, &cpu->Y);
         break;
       }
       case INS_LDY_ABS:
       {
         Word abs_addr = fetch_word(cpu, mem, &cycles);
         cpu->Y = read_byte(mem, abs_addr, &cycles);
-        ldy_set_flags(cpu);
+        set_load_flags(cpu, &cpu->Y);
         break;
       }
       case INS_LDY_ABS_X:
@@ -302,7 +309,26 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
           cycles--;
         }
         cpu->Y = read_byte(mem, result, &cycles);
-        ldy_set_flags(cpu);
+        set_load_flags(cpu, &cpu->Y);
+        break;
+      }
+      // STA
+      case INS_STA_ZP:
+      {
+        Word trg_addr = fetch_word(cpu, mem, &cycles);
+        mem->Data[trg_addr] = cpu->A;
+        break;
+      }
+      case INS_STA_ZP_X:
+      {
+        Word trg_addr = fetch_word(cpu, mem, &cycles);
+        trg_addr += cpu->X;
+        cycles--;
+        mem->Data[trg_addr] = cpu->A;
+        break;
+      }
+      case INS_STA_ABS:
+      {
         break;
       }
       // JSR
@@ -312,6 +338,19 @@ s32 cpu_execute(CPU *cpu, MEM *mem, s32 cycles)
         write_word(mem, cpu->PC - 1, cpu->SP, &cycles);
         cpu->PC = subroutine_addr;
         cycles--;
+        break;
+      }
+      case INS_JMP_A:
+      {
+        Word jmp_addr = fetch_word(cpu, mem, &cycles);
+        cpu->PC = jmp_addr;
+        break;
+      }
+      case INS_JMP_IND:
+      {
+        Word ind_addr = fetch_word(cpu, mem, &cycles);
+        Word new_pc = read_word(mem, ind_addr, &cycles);
+        cpu->PC = new_pc;
         break;
       }
       default:
